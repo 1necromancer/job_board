@@ -24,6 +24,3 @@ npm-debug.log*
 
 # Railway
 .railway/
-
-# Docs
-README.md
