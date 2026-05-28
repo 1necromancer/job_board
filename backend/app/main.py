@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,19 +19,34 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Create tables on startup. Alembic migrations are also provided for production.
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    # Warm Redis client + ping.
+    # Each startup step is isolated so a failing dependency never blocks
+    # the app from serving /api/health (Railway healthcheck).
     try:
-        await get_redis().ping()
-        logger.info("Redis connected")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables ensured")
     except Exception:
-        logger.exception("Redis ping failed")
-    # Telegram bot runs in-process as a background task.
-    await bot_runner.start()
+        logger.exception("Failed to create database tables on startup")
+
+    r = get_redis()
+    if r is not None:
+        try:
+            await asyncio.wait_for(r.ping(), timeout=5)
+            logger.info("Redis connected")
+        except Exception:
+            logger.exception("Redis ping failed — continuing without Redis")
+
+    try:
+        await bot_runner.start()
+    except Exception:
+        logger.exception("Telegram bot failed to start — continuing without it")
+
     yield
-    await bot_runner.stop()
+
+    try:
+        await bot_runner.stop()
+    except Exception:
+        logger.exception("Error stopping Telegram bot")
     await close_redis()
     await engine.dispose()
 

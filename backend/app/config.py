@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     # DATABASE_URL example: postgresql://user:pass@host:port/db
     # REDIS_URL example: redis://default:pass@host:port
     DATABASE_URL: str = Field(..., description="PostgreSQL connection string")
-    REDIS_URL: str = Field(..., description="Redis connection string")
+    REDIS_URL: str | None = Field(
+        default=None,
+        description="Redis connection string. If empty, cache/pub-sub/rate-limit are no-op.",
+    )
 
     # Auth
     ADMIN_PASSWORD: str = Field(..., description="Plain admin password (hashed in memory at startup)")

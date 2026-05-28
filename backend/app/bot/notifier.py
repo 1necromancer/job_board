@@ -14,9 +14,17 @@ logger = logging.getLogger(__name__)
 async def listen_new_applications(bot: Bot) -> None:
     """Subscribe to Redis and forward new application events to all admins."""
     s = get_settings()
+    if not s.REDIS_URL:
+        logger.warning("REDIS_URL is not set — bot notifications disabled.")
+        return
     while True:
         try:
-            client = redis.from_url(s.REDIS_URL, decode_responses=True)
+            client = redis.from_url(
+                s.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=None,  # pub/sub keeps the socket open indefinitely
+            )
             pubsub = client.pubsub()
             await pubsub.subscribe(CHANNEL_NEW_APPLICATION)
             logger.info("Bot subscribed to %s", CHANNEL_NEW_APPLICATION)
