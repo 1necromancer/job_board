@@ -5,11 +5,10 @@ import logging
 import redis.asyncio as redis
 from aiogram import Bot
 
-from bot.config import get_settings
+from app.config import get_settings
+from app.redis_client import CHANNEL_NEW_APPLICATION
 
 logger = logging.getLogger(__name__)
-
-CHANNEL_NEW_APPLICATION = "applications:new"
 
 
 async def listen_new_applications(bot: Bot) -> None:
@@ -20,7 +19,7 @@ async def listen_new_applications(bot: Bot) -> None:
             client = redis.from_url(s.REDIS_URL, decode_responses=True)
             pubsub = client.pubsub()
             await pubsub.subscribe(CHANNEL_NEW_APPLICATION)
-            logger.info("Subscribed to %s", CHANNEL_NEW_APPLICATION)
+            logger.info("Bot subscribed to %s", CHANNEL_NEW_APPLICATION)
 
             async for msg in pubsub.listen():
                 if msg.get("type") != "message":
@@ -41,6 +40,8 @@ async def listen_new_applications(bot: Bot) -> None:
                         await bot.send_message(admin_id, text)
                     except Exception:
                         logger.exception("Failed to notify admin %s", admin_id)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("Pub/sub loop crashed, reconnecting in 5s")
             await asyncio.sleep(5)

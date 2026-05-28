@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.bot.runner import bot_runner
 from app.config import get_settings
 from app.db import Base, engine
 from app.redis_client import close_redis, get_redis
@@ -26,7 +27,10 @@ async def lifespan(_: FastAPI):
         logger.info("Redis connected")
     except Exception:
         logger.exception("Redis ping failed")
+    # Telegram bot runs in-process as a background task.
+    await bot_runner.start()
     yield
+    await bot_runner.stop()
     await close_redis()
     await engine.dispose()
 

@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from bot.api_client import backend
+from app.bot import services
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -14,10 +14,10 @@ router = Router()
 @router.message(F.text == "📬 Applications")
 async def list_applications(message: Message):
     try:
-        apps = await backend.list_applications()
+        apps = await services.list_applications()
     except Exception:
         logger.exception("Failed to fetch applications")
-        await message.answer("❌ Failed to fetch applications from the backend.")
+        await message.answer("❌ Failed to fetch applications.")
         return
 
     if not apps:

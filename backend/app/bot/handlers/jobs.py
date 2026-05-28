@@ -6,8 +6,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
-from bot.api_client import backend
-from bot.keyboards import (
+from app.bot import services
+from app.bot.keyboards import (
     cancel_kb,
     confirm_delete,
     job_actions,
@@ -44,10 +44,10 @@ def _format_job(job: dict) -> str:
 @router.message(F.text == "📋 Jobs")
 async def list_jobs(message: Message):
     try:
-        jobs = await backend.list_jobs()
+        jobs = await services.list_jobs()
     except Exception:
         logger.exception("Failed to fetch jobs")
-        await message.answer("❌ Failed to fetch jobs from the backend.")
+        await message.answer("❌ Failed to fetch jobs.")
         return
 
     if not jobs:
@@ -164,7 +164,7 @@ async def new_job_confirm(message: Message, state: FSMContext):
         "status": text,
     }
     try:
-        job = await backend.create_job(payload)
+        job = await services.create_job(payload)
     except Exception:
         logger.exception("Failed to create job")
         await state.clear()
@@ -183,12 +183,17 @@ async def new_job_confirm(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("job:status:"))
 async def cb_toggle_status(cb: CallbackQuery):
+    if not cb.data:
+        return
     _, _, job_id, target = cb.data.split(":")
     try:
-        job = await backend.update_job(int(job_id), {"status": target})
+        job = await services.update_job(int(job_id), {"status": target})
     except Exception:
         logger.exception("Failed to toggle status")
         await cb.answer("Failed", show_alert=True)
+        return
+    if not job:
+        await cb.answer("Job not found", show_alert=True)
         return
     await cb.answer(f"Status: {job['status']}")
     if cb.message:
@@ -199,9 +204,11 @@ async def cb_toggle_status(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("job:apps:"))
 async def cb_view_apps(cb: CallbackQuery):
+    if not cb.data or not cb.message:
+        return
     job_id = int(cb.data.split(":")[2])
     try:
-        apps = await backend.list_applications(job_id)
+        apps = await services.list_applications(job_id)
     except Exception:
         logger.exception("Failed to fetch applications")
         await cb.answer("Failed", show_alert=True)
@@ -222,12 +229,17 @@ async def cb_view_apps(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("job:delete:confirm:"))
 async def cb_delete_confirm(cb: CallbackQuery):
+    if not cb.data:
+        return
     job_id = int(cb.data.split(":")[3])
     try:
-        await backend.delete_job(job_id)
+        ok = await services.delete_job(job_id)
     except Exception:
         logger.exception("Failed to delete job")
         await cb.answer("Failed", show_alert=True)
+        return
+    if not ok:
+        await cb.answer("Job not found", show_alert=True)
         return
     await cb.answer("Deleted")
     if cb.message:
@@ -243,6 +255,8 @@ async def cb_delete_cancel(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("job:delete:"))
 async def cb_delete_ask(cb: CallbackQuery):
+    if not cb.data:
+        return
     job_id = int(cb.data.split(":")[2])
     await cb.answer()
     if cb.message:

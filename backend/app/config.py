@@ -5,6 +5,12 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _csv_to_int_list(v):
+    if isinstance(v, str):
+        return [int(x.strip()) for x in v.split(",") if x.strip()]
+    return v
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -27,6 +33,10 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: List[str] = ["*"]
 
+    # Telegram bot (optional — bot only starts when BOT_TOKEN is set)
+    BOT_TOKEN: str | None = None
+    ADMIN_TG_IDS: List[int] = Field(default_factory=list)
+
     # Misc
     APP_NAME: str = "Job Board API"
     DEBUG: bool = False
@@ -47,6 +57,11 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
+
+    @field_validator("ADMIN_TG_IDS", mode="before")
+    @classmethod
+    def split_tg_ids(cls, v):
+        return _csv_to_int_list(v)
 
 
 @lru_cache
