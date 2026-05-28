@@ -5,18 +5,10 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def _csv_to_int_list(v):
-    if isinstance(v, str):
-        return [int(x.strip()) for x in v.split(",") if x.strip()]
-    return v
-
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Railway injects these automatically when you attach the plugins.
-    # DATABASE_URL example: postgresql://user:pass@host:port/db
-    # REDIS_URL example: redis://default:pass@host:port
     DATABASE_URL: str = Field(..., description="PostgreSQL connection string")
     REDIS_URL: str | None = Field(
         default=None,
@@ -33,12 +25,14 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str | None = None
     RESEND_FROM: str = "Job Board <onboarding@resend.dev>"
 
-    # CORS
-    CORS_ORIGINS: List[str] = ["*"]
+    # CORS — stored as a raw string to avoid pydantic-settings JSON decoding.
+    # Use a comma-separated list, e.g. "https://a.com,https://b.com" or "*".
+    CORS_ORIGINS: str = "*"
 
-    # Telegram bot (optional — bot only starts when BOT_TOKEN is set)
+    # Telegram bot (optional — bot only starts when BOT_TOKEN is set).
+    # ADMIN_TG_IDS is a raw comma-separated string for the same reason as CORS.
     BOT_TOKEN: str | None = None
-    ADMIN_TG_IDS: List[int] = Field(default_factory=list)
+    ADMIN_TG_IDS_RAW: str = Field(default="", alias="ADMIN_TG_IDS")
 
     # Misc
     APP_NAME: str = "Job Board API"
@@ -54,17 +48,28 @@ class Settings(BaseSettings):
             v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def split_origins(cls, v):
-        if isinstance(v, str):
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return v
+    @property
+    def cors_origins_list(self) -> List[str]:
+        raw = (self.CORS_ORIGINS or "").strip()
+        if not raw or raw == "*":
+            return ["*"]
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
-    @field_validator("ADMIN_TG_IDS", mode="before")
-    @classmethod
-    def split_tg_ids(cls, v):
-        return _csv_to_int_list(v)
+    @property
+    def ADMIN_TG_IDS(self) -> List[int]:
+        raw = (self.ADMIN_TG_IDS_RAW or "").strip()
+        if not raw:
+            return []
+        out: List[int] = []
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                out.append(int(part))
+            except ValueError:
+                continue
+        return out
 
 
 @lru_cache
